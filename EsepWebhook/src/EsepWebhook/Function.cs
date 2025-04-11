@@ -19,7 +19,18 @@ public class Function {
 
         dynamic json;
         
-        json = JsonConvert.DeserializeObject<dynamic>(input.ToString());
+        try {
+            json = JsonConvert.DeserializeObject<dynamic>(input.ToString());
+            if (json?.issue?.html_url == null) {
+                context.Logger.LogError("Invalid payload: 'html_url' is missing in the 'issue' object.");
+                throw new Exception("Invalid payload: 'html_url' is missing in the 'issue' object.");
+            }
+        }
+        catch (Exception ex) {
+            context.Logger.LogError("Error parsing JSON input: " + ex.Message);
+            throw new Exception("Error parsing JSON input: " + ex.Message);
+        }
+                
         string issueUrl = json.issue.html_url;
 
         string payload = $"{{\"text\":\"Issue Created: {issueUrl}\"}}";
@@ -31,7 +42,7 @@ public class Function {
 
         var response = client.Send(webRequest);
         using var reader = new StreamReader(response.Content.ReadAsStream());
-        
+
         return reader.ReadToEnd();
     }
 }
