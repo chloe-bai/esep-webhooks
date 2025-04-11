@@ -7,42 +7,45 @@ using Newtonsoft.Json;
 
 namespace EsepWebhook;
 
-public class Function {
-    public string FunctionHandler(object input, ILambdaContext context) {
+public class Function
+{
+    public string FunctionHandler(object input, ILambdaContext context)
+    {
         context.Logger.LogInformation("FunctionHandler received an event.");
+        context.Logger.LogInformation($"Raw input: {input}");
 
         var slackUrl = Environment.GetEnvironmentVariable("SLACK_URL");
-        if (string.IsNullOrEmpty(slackUrl)) {
+        if (string.IsNullOrEmpty(slackUrl))
+        {
             context.Logger.LogError("SLACK_URL environment variable not set.");
             throw new Exception("SLACK_URL environment variable not set.");
         }
 
-        dynamic json;
-        
-        try {
-            json = JsonConvert.DeserializeObject<dynamic>(input.ToString());
-            if (json?.issue?.html_url == null) {
-                context.Logger.LogError("Invalid payload: 'html_url' is missing in the 'issue' object.");
-                throw new Exception("Invalid payload: 'html_url' is missing in the 'issue' object.");
-            }
+        try
+        {
+            dynamic json = JsonConvert.DeserializeObject<dynamic>(input.ToString());
+            string issueUrl = json.issue.html_url;
+
+            context.Logger.LogInformation($"Extracted issue URL: {issueUrl}");
+
+            string payload = $"{{\"text\":\"Issue Created: {issueUrl}\"}}";
+
+            var client = new HttpClient();
+            var webRequest = new HttpRequestMessage(HttpMethod.Post, slackUrl)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+
+            var response = client.Send(webRequest);
+            string result = new StreamReader(response.Content.ReadAsStream()).ReadToEnd();
+            context.Logger.LogInformation($"Slack response: {result}");
+
+            return result;
         }
-        catch (Exception ex) {
-            context.Logger.LogError("Error parsing JSON input: " + ex.Message);
-            throw new Exception("Error parsing JSON input: " + ex.Message);
+        catch (Exception ex)
+        {
+            context.Logger.LogError($"Exception occurred: {ex.Message}");
+            return $"Error: {ex.Message}";
         }
-                
-        string issueUrl = json.issue.html_url;
-
-        string payload = $"{{\"text\":\"Issue Created: {issueUrl}\"}}";
-
-        var client = new HttpClient();
-        var webRequest = new HttpRequestMessage(HttpMethod.Post, slackUrl) {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-
-        var response = client.Send(webRequest);
-        using var reader = new StreamReader(response.Content.ReadAsStream());
-
-        return reader.ReadToEnd();
     }
 }
